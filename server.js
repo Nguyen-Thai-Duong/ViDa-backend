@@ -1,3 +1,4 @@
+// server.js
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
@@ -8,51 +9,65 @@ const { initializeDatabase, ProductService } = require('./mongodb');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-/* ✅ CORS configuration */
+/** ---------------- CORS (cho Vercel & localhost) ---------------- **/
 const allowedOrigins = [
-    'https://vi-da-frontend-gqt3lzfvb-duongs-projects-c939acf1.vercel.app', // domain hiện tại của bạn
-    'https://vi-da-frontend.vercel.app', // domain rút gọn (nếu bạn dùng)
-    'http://localhost:3000'
+    'http://localhost:3000',
+    process.env.FRONTEND_URL, // đặt biến này trên Render = URL vercel của bạn, vd: https://vi-da-frontend-xxxxx.vercel.app
 ];
 
+// Cho giai đoạn debug, mở toang CORS (an toàn vì chỉ public API đọc/ghi nhẹ)
 app.use(cors({
-    origin: function (origin, callback) {
-        if (!origin) return callback(null, true); // Cho phép request không có Origin (Postman, health check)
-        if (allowedOrigins.includes(origin)) return callback(null, true);
-        return callback(new Error('Not allowed by CORS'), false);
+    origin: (origin, cb) => {
+        if (!origin) return cb(null, true); // health/ping, server-to-server
+        // nếu muốn khóa theo whitelist, mở comment 3 dòng dưới và xóa cb(null,true)
+        // const ok = allowedOrigins.filter(Boolean).some(o => origin.startsWith(o));
+        // if (ok) return cb(null, true);
+        // return cb(new Error('Not allowed by CORS'));
+        return cb(null, true);
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
-    credentials: true
+    credentials: false,
 }));
 
+// đảm bảo preflight luôn 204
 app.options('*', cors());
+app.use((req, res, next) => {
+    // Có thể bỏ 3 header dưới khi đã khóa origin theo whitelist ở trên
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    if (req.method === 'OPTIONS') return res.sendStatus(204);
+    next();
+});
+
+/** ---------------- Body parser ---------------- **/
 app.use(express.json());
 
-/* ✅ Sample data */
+/** ---------------- Sample data ---------------- **/
 const teamMembers = [
-    { id: 1, name: "Lê Thị Tố Như", role: "CEO & Leader", description: "Lãnh đạo nhóm với tầm nhìn chiến lược về phát triển sản phẩm thân thiện môi trường.", avatar: "👩‍💼", gender: "Nữ" },
-    { id: 2, name: "Nguyễn Ngọc Hân", role: "Chuyên viên sản xuất", description: "Chuyên gia về quy trình nuôi và chăm sóc scoby.", avatar: "👩‍🔬", gender: "Nữ" },
-    { id: 3, name: "Nguyễn Thu Minh", role: "Thiết kế sản phẩm", description: "Thiết kế các mẫu túi từ scoby thẩm mỹ và bền vững.", avatar: "👩‍🎨", gender: "Nữ" },
-    { id: 4, name: "Nguyễn Thái Dương", role: "CTO - Giám đốc Công nghệ", description: "Phụ trách công nghệ sấy khô và quy trình sản xuất.", avatar: "👨‍💻", gender: "Nam" },
-    { id: 5, name: "Nguyễn Ngọc Thu Trang", role: "CMO - Giám đốc Marketing", description: "Phát triển thương hiệu ViDa và mở rộng thị trường.", avatar: "👩‍💼", gender: "Nữ" }
+    { id: 1, name: "Lê Thị Tố Như", role: "CEO & Leader", description: "Lãnh đạo nhóm với tầm nhìn chiến lược về phát triển sản phẩm thân thiện môi trường. Có kinh nghiệm quản lý và định hướng phát triển bền vững.", avatar: "👩‍💼", gender: "Nữ" },
+    { id: 2, name: "Nguyễn Ngọc Hân", role: "Chuyên viên sản xuất", description: "Chuyên gia về quy trình nuôi và chăm sóc scoby. Đảm bảo chất lượng nguyên liệu đầu vào cho sản phẩm.", avatar: "👩‍🔬", gender: "Nữ" },
+    { id: 3, name: "Nguyễn Thu Minh", role: "Thiết kế sản phẩm", description: "Chịu trách nhiệm thiết kế các mẫu túi đa dạng và thẩm mỹ từ scoby. Tạo ra những sản phẩm vừa đẹp vừa thân thiện môi trường.", avatar: "👩‍🎨", gender: "Nữ" },
+    { id: 4, name: "Nguyễn Thái Dương", role: "CTO - Giám đốc Công nghệ", description: "Chuyên gia về công nghệ sấy khô và quy trình sản xuất. Đảm bảo hiệu quả và chất lượng trong toàn bộ quy trình sản xuất.", avatar: "👨‍💻", gender: "Nam" },
+    { id: 5, name: "Nguyễn Ngọc Thu Trang", role: "CMO - Giám đốc Marketing", description: "Chịu trách nhiệm phát triển thương hiệu ViDa và mở rộng thị trường. Xây dựng chiến lược marketing cho sản phẩm thân thiện môi trường.", avatar: "👩‍💼", gender: "Nữ" }
 ];
 
 const products = [
-    { id: 1, name: "Túi shopping nhỏ", description: "25x30cm, phù hợp mua sắm hàng ngày", capacity: "3-5kg", price: "Liên hệ", image: "👜" },
-    { id: 2, name: "Túi shopping lớn", description: "35x40cm, lý tưởng cho việc mua sắm lớn", capacity: "8-10kg", price: "Liên hệ", image: "🛍️" },
-    { id: 3, name: "Túi đựng đồ cá nhân", description: "20x25cm, hoàn hảo cho đồ dùng cá nhân", capacity: "2-3kg", price: "Liên hệ", image: "👝" },
-    { id: 4, name: "Túi đựng thực phẩm", description: "30x35cm, an toàn cho thực phẩm", capacity: "5-7kg", price: "Liên hệ", image: "🥬" }
+    { id: 1, name: "Túi shopping nhỏ", description: "Kích thước 25x30cm, phù hợp cho việc mua sắm hàng ngày", capacity: "Chứa được 3-5kg", price: "Liên hệ", image: "👜" },
+    { id: 2, name: "Túi shopping lớn", description: "Kích thước 35x40cm, lý tưởng cho việc mua sắm lớn", capacity: "Chứa được 8-10kg", price: "Liên hệ", image: "🛍️" },
+    { id: 3, name: "Túi đựng đồ cá nhân", description: "Kích thước 20x25cm, hoàn hảo cho đồ dùng cá nhân", capacity: "Chứa được 2-3kg", price: "Liên hệ", image: "👝" },
+    { id: 4, name: "Túi đựng thực phẩm", description: "Kích thước 30x35cm, an toàn cho thực phẩm", capacity: "Chứa được 5-7kg", price: "Liên hệ", image: "🥬" }
 ];
 
 const futurePlans = [
-    { id: 1, title: "Mở rộng quy mô sản xuất", description: "Tăng cường năng lực sản xuất", timeline: "6 tháng tới", type: "short-term" },
-    { id: 2, title: "Nghiên cứu sản phẩm mới", description: "Phát triển các sản phẩm khác từ scoby", timeline: "3-6 tháng tới", type: "short-term" },
-    { id: 3, title: "Trở thành thương hiệu hàng đầu", description: "Tại Việt Nam", timeline: "2-3 năm tới", type: "long-term" },
-    { id: 4, title: "Xuất khẩu quốc tế", description: "Mở rộng sang Đông Nam Á", timeline: "3-5 năm tới", type: "long-term" }
+    { id: 1, title: "Mở rộng quy mô sản xuất", description: "Tăng cường năng lực sản xuất để đáp ứng nhu cầu thị trường ngày càng tăng", timeline: "6 tháng tới", type: "short-term" },
+    { id: 2, title: "Nghiên cứu sản phẩm mới", description: "Phát triển các sản phẩm khác từ scoby như hộp đựng, túi xách, v.v.", timeline: "3-6 tháng tới", type: "short-term" },
+    { id: 3, title: "Trở thành thương hiệu hàng đầu", description: "Trở thành thương hiệu tiên phong trong lĩnh vực sản phẩm thân thiện môi trường tại Việt Nam", timeline: "2-3 năm tới", type: "long-term" },
+    { id: 4, title: "Xuất khẩu ra thị trường quốc tế", description: "Mở rộng sang các thị trường Đông Nam Á và châu Á", timeline: "3-5 năm tới", type: "long-term" }
 ];
 
-/* ✅ Routes */
+/** ---------------- Routes ---------------- **/
 app.get('/', (req, res) => {
     res.json({
         message: 'Chào mừng đến với API Scoby!',
@@ -72,35 +87,47 @@ app.get('/api/products', (req, res) => {
 app.get('/api/plans', (req, res) => {
     const { type } = req.query;
     let filteredPlans = futurePlans;
-    if (type && ['short-term', 'long-term'].includes(type))
-        filteredPlans = futurePlans.filter(plan => plan.type === type);
+    if (type && ['short-term', 'long-term'].includes(type)) {
+        filteredPlans = futurePlans.filter(p => p.type === type);
+    }
     res.json({ success: true, data: filteredPlans, count: filteredPlans.length });
 });
 
 app.post('/api/contact', (req, res) => {
-    const { name, email, message } = req.body;
-    if (!name || !email || !message)
+    const { name, email, message } = req.body || {};
+    if (!name || !email || !message) {
         return res.status(400).json({ success: false, message: 'Vui lòng điền đầy đủ thông tin' });
-    console.log('New contact:', { name, email, message });
-    res.json({ success: true, message: 'Cảm ơn bạn đã liên hệ!' });
+    }
+    console.log('New contact message:', { name, email, message });
+    res.json({ success: true, message: 'Cảm ơn bạn đã liên hệ! Chúng tôi sẽ phản hồi sớm nhất có thể.' });
 });
 
-/* ✅ QR Code endpoints */
+// QR: create
 app.post('/api/qr/create', async (req, res) => {
-    const { name, type, batchNumber, producer, description } = req.body;
-    if (!name || !type || !batchNumber || !producer)
+    const { name, type, batchNumber, producer, description } = req.body || {};
+    if (!name || !type || !batchNumber || !producer) {
         return res.status(400).json({ success: false, message: 'Vui lòng điền đầy đủ thông tin bắt buộc' });
+    }
 
     try {
         const productId = `ViDa-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
         const productionDate = new Date().toISOString().split('T')[0];
+
         const productData = {
-            id: productId, name, type, productionDate, batchNumber,
-            producer, description: description || '',
-            website: 'vida.com', lookupUrl: `vida.com/qr-lookup/${productId}`
+            id: productId,
+            name,
+            type,
+            productionDate,
+            batchNumber,
+            producer,
+            description: description || '',
+            website: 'vida.com',
+            lookupUrl: `vida.com/qr-lookup/${productId}`
         };
+
         await ProductService.createProduct(productData);
-        console.log('✅ New product created:', productData);
+        console.log('✅ New product created in MongoDB:', productData);
+
         res.json({ success: true, data: productData, message: 'Sản phẩm đã được tạo thành công' });
     } catch (err) {
         console.error('❌ Error creating product:', err);
@@ -108,42 +135,70 @@ app.post('/api/qr/create', async (req, res) => {
     }
 });
 
+// QR: lookup
 app.get('/api/qr/lookup/:productId', async (req, res) => {
     const { productId } = req.params;
     try {
         const product = await ProductService.findProductById(productId);
-        if (product)
-            res.json({ success: true, data: product });
-        else
-            res.status(404).json({ success: false, message: 'Không tìm thấy sản phẩm với mã này' });
+        if (!product) return res.status(404).json({ success: false, message: 'Không tìm thấy sản phẩm với mã này' });
+
+        const productInfo = {
+            id: product.id,
+            name: product.name,
+            type: product.type,
+            productionDate: product.productionDate,
+            batchNumber: product.batchNumber,
+            producer: product.producer,
+            description: product.description || '',
+            website: 'vida.com',
+            lookupUrl: `vida.com/qr-lookup/${product.id}`
+        };
+        res.json({ success: true, data: productInfo });
     } catch (err) {
         console.error('❌ Error looking up product:', err);
         res.status(500).json({ success: false, message: 'Có lỗi xảy ra khi tra cứu sản phẩm' });
     }
 });
 
+// list products
 app.get('/api/qr/products', async (req, res) => {
     try {
-        const products = await ProductService.getAllProducts();
-        res.json({ success: true, data: products, count: products.length });
+        const list = await ProductService.getAllProducts();
+        const formatted = list.map(p => ({
+            id: p.id,
+            name: p.name,
+            type: p.type,
+            productionDate: p.productionDate,
+            batchNumber: p.batchNumber,
+            producer: p.producer,
+            description: p.description || '',
+            website: 'vida.com',
+            createdAt: p.createdAt
+        }));
+        res.json({ success: true, data: formatted, count: formatted.length });
     } catch (err) {
         console.error('❌ Error fetching products:', err);
         res.status(500).json({ success: false, message: 'Có lỗi xảy ra khi lấy danh sách sản phẩm' });
     }
 });
 
+// Health
 app.get('/api/health', (req, res) => {
     res.json({ success: true, message: 'Server is running', timestamp: new Date().toISOString() });
 });
 
-/* ✅ 404 & Error handlers */
-app.use('*', (req, res) => res.status(404).json({ success: false, message: 'Endpoint không tồn tại' }));
+// 404
+app.use('*', (req, res) => {
+    res.status(404).json({ success: false, message: 'Endpoint không tồn tại' });
+});
+
+// Error handler
 app.use((err, req, res, next) => {
-    console.error(err.stack);
+    console.error(err.stack || err);
     res.status(500).json({ success: false, message: 'Có lỗi xảy ra trên server' });
 });
 
-/* ✅ Start server */
+// Init DB & start
 const startServer = async () => {
     try {
         await initializeDatabase();
@@ -156,5 +211,4 @@ const startServer = async () => {
         process.exit(1);
     }
 };
-
 startServer();
