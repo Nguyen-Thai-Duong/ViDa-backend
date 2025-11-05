@@ -10,6 +10,7 @@ let db = null;
 async function initializeDatabase() {
   try {
     if (!MONGODB_URI) throw new Error('Missing MONGODB_URI');
+    console.log('🔄 Connecting to MongoDB...', MONGODB_URI);
 
     client = new MongoClient(MONGODB_URI, {
       serverApi: {
@@ -52,11 +53,17 @@ async function closeConnection() {
 const ProductService = {
   async createProduct(productData) {
     const db = getDatabase();
-    return await db.collection('products').insertOne({ ...productData, createdAt: new Date() });
+    console.log('📝 Creating product:', productData);
+    const result = await db.collection('products').insertOne({ ...productData, createdAt: new Date() });
+    console.log('✅ Product created:', result);
+    return result;
   },
   async findProductById(id) {
     const db = getDatabase();
-    return await db.collection('products').findOne({ id });
+    console.log('🔍 Finding product by id:', id);
+    const product = await db.collection('products').findOne({ id });
+    console.log('🔍 Found product:', product);
+    return product;
   },
   async getAllProducts() {
     const db = getDatabase();

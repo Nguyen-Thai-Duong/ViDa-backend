@@ -12,18 +12,17 @@ const PORT = process.env.PORT || 5000;
 /** ---------------- CORS (cho Vercel & localhost) ---------------- **/
 const allowedOrigins = [
     'http://localhost:3000',
-    process.env.FRONTEND_URL, // đặt biến này trên Render = URL vercel của bạn, vd: https://vi-da-frontend-xxxxx.vercel.app
+    'https://vi-da-frontend-gqt3lzfvb-duongs-projects-c939acf1.vercel.app',
+    process.env.FRONTEND_URL,
 ];
 
-// Cho giai đoạn debug, mở toang CORS (an toàn vì chỉ public API đọc/ghi nhẹ)
+// Cấu hình CORS cho production
 app.use(cors({
     origin: (origin, cb) => {
         if (!origin) return cb(null, true); // health/ping, server-to-server
-        // nếu muốn khóa theo whitelist, mở comment 3 dòng dưới và xóa cb(null,true)
-        // const ok = allowedOrigins.filter(Boolean).some(o => origin.startsWith(o));
-        // if (ok) return cb(null, true);
-        // return cb(new Error('Not allowed by CORS'));
-        return cb(null, true);
+        const ok = allowedOrigins.filter(Boolean).some(o => origin.startsWith(o));
+        if (ok) return cb(null, true);
+        return cb(new Error('Not allowed by CORS'));
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
@@ -104,8 +103,10 @@ app.post('/api/contact', (req, res) => {
 
 // QR: create
 app.post('/api/qr/create', async (req, res) => {
+    console.log('📝 Received create request:', req.body);
     const { name, type, batchNumber, producer, description } = req.body || {};
     if (!name || !type || !batchNumber || !producer) {
+        console.log('❌ Missing required fields');
         return res.status(400).json({ success: false, message: 'Vui lòng điền đầy đủ thông tin bắt buộc' });
     }
 
@@ -121,8 +122,9 @@ app.post('/api/qr/create', async (req, res) => {
             batchNumber,
             producer,
             description: description || '',
-            website: 'vida.com',
-            lookupUrl: `vida.com/qr-lookup/${productId}`
+            website: 'https://vi-da-frontend-gqt3lzfvb-duongs-projects-c939acf1.vercel.app',
+            // QR code sẽ chỉ chứa ID sản phẩm
+            qrContent: productId
         };
 
         await ProductService.createProduct(productData);
@@ -138,8 +140,10 @@ app.post('/api/qr/create', async (req, res) => {
 // QR: lookup
 app.get('/api/qr/lookup/:productId', async (req, res) => {
     const { productId } = req.params;
+    console.log('🔍 Looking up product:', productId);
     try {
         const product = await ProductService.findProductById(productId);
+        console.log('📦 Found product:', product);
         if (!product) return res.status(404).json({ success: false, message: 'Không tìm thấy sản phẩm với mã này' });
 
         const productInfo = {
@@ -150,8 +154,8 @@ app.get('/api/qr/lookup/:productId', async (req, res) => {
             batchNumber: product.batchNumber,
             producer: product.producer,
             description: product.description || '',
-            website: 'vida.com',
-            lookupUrl: `vida.com/qr-lookup/${product.id}`
+            website: 'https://vi-da-frontend-gqt3lzfvb-duongs-projects-c939acf1.vercel.app'
+            // Không cần trả về lookupUrl vì frontend sẽ tự xử lý based on ID
         };
         res.json({ success: true, data: productInfo });
     } catch (err) {
@@ -194,15 +198,17 @@ app.use('*', (req, res) => {
 
 // Error handler
 app.use((err, req, res, next) => {
-    console.error(err.stack || err);
+    console.error('❌ Server error:', err);
+    console.error('Stack:', err.stack);
     res.status(500).json({ success: false, message: 'Có lỗi xảy ra trên server' });
 });
 
 // Init DB & start
 const startServer = async () => {
     try {
+        console.log('🔄 Initializing server...');
         await initializeDatabase();
-        app.listen(PORT, () => {
+        const server = app.listen(PORT, () => {
             console.log(`🚀 Server ViDa đang chạy tại http://localhost:${PORT}`);
             console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
         });
@@ -211,4 +217,14 @@ const startServer = async () => {
         process.exit(1);
     }
 };
+process.on('uncaughtException', (err) => {
+    console.error('❌ Uncaught Exception:', err);
+    console.error(err.stack);
+});
+
+process.on('unhandledRejection', (err) => {
+    console.error('❌ Unhandled Rejection:', err);
+    if (err instanceof Error) console.error(err.stack);
+});
+
 startServer();
