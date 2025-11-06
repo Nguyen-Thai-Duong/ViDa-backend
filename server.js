@@ -12,7 +12,7 @@ const PORT = process.env.PORT || 5000;
 /** ---------------- CORS (cho Vercel & localhost) ---------------- **/
 const allowedOrigins = [
     'http://localhost:3000',
-    'https://vi-da-frontend-gqt3lzfvb-duongs-projects-c939acf1.vercel.app',
+    'https://vi-da-frontend-l865jqkh0-duongs-projects-c939acf1.vercel.app',
     process.env.FRONTEND_URL,
 ];
 
